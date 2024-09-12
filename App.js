@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, FlatList, Modal } from 'react-native';
+import axios from 'axios';
 
-const MAX_RODADAS = 5; // Número predefinido de rodadas
+const MAX_RODADAS = 5;
 
 const App = () => {
   const [pokemon, setPokemon] = useState({});
@@ -10,8 +11,12 @@ const App = () => {
   const [pontuacao, setPontuacao] = useState(0);
   const [rodadasRestantes, setRodadasRestantes] = useState(MAX_RODADAS);
   const [jogoIniciado, setJogoIniciado] = useState(false);
-  const [resultadoFinal, setResultadoFinal] = useState(null); // Armazena o resultado final
-  const [mostrarBotaoProximo, setMostrarBotaoProximo] = useState(false); // Estado para mostrar o botão "Próximo Pokémon"
+  const [resultadoFinal, setResultadoFinal] = useState(null);
+  const [mostrarBotaoProximo, setMostrarBotaoProximo] = useState(false);
+  const [mostrarRanking, setMostrarRanking] = useState(false);
+  const [ranking, setRanking] = useState([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [nome, setNome] = useState('');
 
   useEffect(() => {
     if (jogoIniciado && rodadasRestantes > 0) {
@@ -19,14 +24,20 @@ const App = () => {
     }
   }, [jogoIniciado]);
 
+  useEffect(() => {
+    if (mostrarRanking) {
+      buscarRanking();
+    }
+  }, [mostrarRanking]);
+
   const buscarNovoPokemon = async () => {
     try {
-      const id = Math.floor(Math.random() * 1000) + 1; // ID aleatório de Pokémon
+      const id = Math.floor(Math.random() * 1000) + 1;
       const resposta = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
       const dados = await resposta.json();
       setPokemon(dados);
       setRetorno('');
-      setMostrarBotaoProximo(false); // Esconde o botão "Próximo Pokémon" ao buscar um novo Pokémon
+      setMostrarBotaoProximo(false);
     } catch (erro) {
       console.error(erro);
     }
@@ -42,12 +53,25 @@ const App = () => {
     setPalpite('');
     setRodadasRestantes(rodadasRestantes - 1);
 
-    // Mostrar o botão "Próximo Pokémon" se ainda houver rodadas restantes
     if (rodadasRestantes > 1) {
       setMostrarBotaoProximo(true);
     } else {
       setJogoIniciado(false);
       setResultadoFinal(pontuacao);
+      setModalVisible(true); // Mostrar modal para entrada do nome
+    }
+  };
+
+  const salvarPontuacao = async () => {
+    try {
+      await axios.post('http://172.16.11.20:3000/save-score', {
+        nome,
+        pontuacao
+      });
+      setModalVisible(false);
+      setMostrarRanking(true); // Mostrar ranking após salvar a pontuação
+    } catch (erro) {
+      console.error('Erro ao salvar a pontuação:', erro);
     }
   };
 
@@ -61,8 +85,24 @@ const App = () => {
     setRodadasRestantes(MAX_RODADAS);
     setResultadoFinal(null);
     setJogoIniciado(true);
-    setMostrarBotaoProximo(false); // Esconde o botão "Próximo Pokémon" ao reiniciar o jogo
+    setMostrarBotaoProximo(false);
+    setMostrarRanking(true); // Corrigido para não mostrar ranking ao reiniciar
   };
+
+  const buscarRanking = async () => {
+    try {
+      const resposta = await axios.get('http://172.16.11.20:3000/ranking');
+      setRanking(resposta.data);
+    } catch (erro) {
+      console.error('Erro ao buscar o ranking:', erro);
+    }
+  };
+
+  const renderRankingItem = ({ item }) => (
+    <View style={estilos.itemRanking}>
+      <Text style={estilos.textoRanking}>{item.nome}: {item.pontuacao}</Text>
+    </View>
+  );
 
   const BotaoPersonalizado = ({ onPress, titulo, corDeFundo, corTexto }) => (
     <TouchableOpacity style={[estilos.botao, { backgroundColor: corDeFundo }]} onPress={onPress}>
@@ -82,6 +122,7 @@ const App = () => {
             corDeFundo="#28A745" 
             corTexto="#FFFFFF" 
           />
+          
         </View>
       ) : !jogoIniciado ? (
         <View style={estilos.telaInicio}>
@@ -91,6 +132,21 @@ const App = () => {
             onPress={() => setJogoIniciado(true)} 
             corDeFundo="#DC3545" 
             corTexto="#FFFFFF" 
+          />
+        </View>
+      ) : mostrarRanking ? (
+        <View style={estilos.telaRanking}>
+          <Text style={estilos.titulo}>Ranking dos Jogadores</Text>
+          <FlatList
+            data={ranking}
+            renderItem={renderRankingItem}
+            keyExtractor={(item, index) => index.toString()}
+          />
+          <BotaoPersonalizado
+            titulo="Voltar ao Início"
+            onPress={() => setMostrarRanking(false)}
+            corDeFundo="#DC3545"
+            corTexto="#FFFFFF"
           />
         </View>
       ) : (
@@ -126,6 +182,38 @@ const App = () => {
           ) : null}
         </View>
       )}
+
+      {/* Modal para entrada do nome */}
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={estilos.modalContainer}>
+          <View style={estilos.modalContent}>
+            <Text style={estilos.modalTitle}>Digite seu Nome</Text>
+            <TextInput
+              style={estilos.modalInput}
+              value={nome}
+              onChangeText={setNome}
+              placeholder="Seu nome"
+            />
+            <BotaoPersonalizado 
+              titulo="Salvar Pontuação" 
+              onPress={salvarPontuacao} 
+              corDeFundo="#28A745" 
+              corTexto="#FFFFFF" 
+            />
+            <BotaoPersonalizado 
+              titulo="Cancelar" 
+              onPress={() => setModalVisible(false)} 
+              corDeFundo="#DC3545" 
+              corTexto="#FFFFFF" 
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -136,24 +224,24 @@ const estilos = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#F8F9FA', // Fundo claro
+    backgroundColor: '#F8F9FA',
   },
   titulo: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 16,
-    color: '#343A40', // Cor escura para o título
+    color: '#343A40',
   },
   tituloResultado: {
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 16,
-    color: '#28A745', // Cor verde para o resultado
+    color: '#28A745',
   },
   imagem: {
     width: 150,
     height: 150,
-    borderRadius: 10, // Bordas arredondadas para a imagem
+    borderRadius: 10,
     marginBottom: 16,
     borderColor: '#FFC107',
     borderWidth: 2,
@@ -172,12 +260,12 @@ const estilos = StyleSheet.create({
     fontSize: 18,
     marginBottom: 16,
     fontWeight: 'bold',
-    color: '#DC3545', // Cor vermelha para o feedback
+    color: '#DC3545',
   },
   pontuacao: {
     fontSize: 18,
     marginTop: 16,
-    color: '#495057', // Cor cinza para a pontuação
+    color: '#495057',
   },
   telaInicio: {
     alignItems: 'center',
@@ -205,7 +293,7 @@ const estilos = StyleSheet.create({
   botao: {
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 25, // Borda arredondada
+    borderRadius: 25,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -217,6 +305,47 @@ const estilos = StyleSheet.create({
     fontSize: 18,
     textAlign: 'center',
     fontWeight: 'bold',
+  },
+  telaRanking: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  itemRanking: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ddd',
+    width: '100%',
+  },
+  textoRanking: {
+    fontSize: 18,
+    color: '#333',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    marginBottom: 10,
+  },
+  modalInput: {
+    height: 40,
+    borderColor: '#6C757D',
+    borderWidth: 1,
+    borderRadius: 5,
+    marginBottom: 20,
+    width: '100%',
+    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
   },
 });
 
