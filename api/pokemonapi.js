@@ -10,7 +10,7 @@ app.use(bodyParser.json()); // Para analisar JSON no corpo da requisição
 // Conectar ao banco de dados
 const mysql = require('mysql');
 const db = mysql.createConnection({
-  host: '172.16.11.20',
+  host: 'localhost',
   user: 'root',
   password: '',
   database: 'pokemon'
